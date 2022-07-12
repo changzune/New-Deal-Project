@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="kr.happyjob.study.employee.dao.EmpTaCalendarDao">
+	<select id="empTaList" resultType="kr.happyjob.study.employee.model.EmpTaModel">
+		SELECT loginID,ta_no,ta_reg_date, ta_yn, COUNT(*) AS ta_yn_cnt
+
+		FROM tb_ta_mgt
+
+		WHERE ta_reg_date BETWEEN #{startDate} AND #{endDate}
+
+		GROUP BY ta_reg_date, ta_yn;
+	</select>
+
+	<select id="empTaDetailList" resultType="kr.happyjob.study.employee.model.EmpTaModel">
+
+
+
+SELECT de.dept_name,em.loginID,a.detail_name as 'kind_hol',us.name,tam.ta_yn
+from tb_dept as de left join tb_emp as em
+	on de.dept_cd = em.dept_cd 
+	INNER join tb_userinfo as us 
+	on em.loginID =us.loginID 
+	right join tb_ta_mgt tam on em.loginID =tam.loginID 
+	and us.loginID = tam.loginID
+	left join (select det.detail_name ,det.detail_code 
+from tb_detail_code det
+where det.group_code  ="VACcd"
+)a on a.detail_code = tam.kind_hol
+where  DATE_FORMAT(tam.ta_reg_date, '%Y-%m-%d') = #{taDate} and ta_yn = #{ta_yn};
+
+
+
+
+
+	</select>
+</mapper>

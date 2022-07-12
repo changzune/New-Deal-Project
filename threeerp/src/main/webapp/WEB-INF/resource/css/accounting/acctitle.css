@@ -1,0 +1,77 @@
+/* TITLE */
+div.content p.conTitle	{padding:0 24px;
+						 height:60px;
+						 margin-bottom: 10px;
+						 border: 1px solid #e2e6ed;
+						 background:#f9fafb;
+						 }
+						 
+p.conTitle > a:first-child {font-family: '나눔바른고딕',NanumBarunGothic;
+							line-height:60px;
+							font-size:28px;
+							font-weight: bold;
+							}
+							
+p.conTitle > span.fr {margin-top:15px;}
+
+div.optionBoxHeader {padding-top:15px;
+                     padding-left:25px;
+					 height:60px;
+					 margin-bottom: 10px;
+					 border: 1px solid #e2e6ed;
+					 background:#f9fafb;
+					 }
+					 
+.optionBoxHeader li{
+			float : left;
+			width : 180px;
+			margin-right : 20px;
+			margin-bottom : 10px;
+		
+		    }
+
+.btn-primary-group>.btn-primary { display: inline-block;
+					    min-width: 80px;
+					    height: 31px;
+					    line-height: 31px;
+					    font-family: '나눔바른고딕',NanumBarunGothic;
+					    font-size: 15px;
+					    color: #fff;
+					    background-color:deepskyblue;
+					    border:none;
+					    margin-top:17px;
+					    margin-left:7px;
+					    text-align: center;
+					    border-radius: 3px;
+					    }	
+			
+.layerType2	{
+	width: 850px;
+	height:380px;
+	/* text-align : justify; */
+}
+
+
+/* table.row > tbody > tr > td{
+	padding: 5px 40px;
+	align:left;
+}
+ */
+ 
+ .btn_areaC >.btnType { display: inline-block;
+					    min-width: 80px;
+					    height: 31px;
+					    line-height: 31px;
+					    font-family: '나눔바른고딕',NanumBarunGothic;
+					    font-size: 15px;
+					    color: #fff;
+					    background-color:deepskyblue;
+					    border:none;
+					    /* margin-top:10px; */
+					    margin-left:7px;
+					    text-align: center;
+					    border-radius: 3px;
+					    }	
+					    
+
+					    

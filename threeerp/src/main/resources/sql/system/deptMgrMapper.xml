@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="kr.happyjob.study.system.dao.deptMgrDao">
+
+
+   <!-- 부서코드 조회 -->
+   <select id = "deptList" resultType = "kr.happyjob.study.system.model.DeptMgrModel">
+      SELECT  dept_cd, dept_name
+      FROM    tb_dept
+       <where>
+         <if test ="(dept_nm != null) and (!dept_nm.equals(''))">   <!-- null 값이 아니거나 빈 문자열이 아니라면 -->
+             and dept_name Like CONCAT('%', #{dept_nm}, '%')     <!-- 부서명필드에서 파라미터'dept_nm'을 검색 -->
+         </if>
+       </where>
+       ORDER BY dept_cd DESC  <!-- 부서코드를 내림차순으로 정렬 -->
+       LIMIT #{pageIndex}, #{pageSize}     <!-- 쿼리 결과를 몇개 보여줄지 제한 거는것 int pageIndex = (currentPage - 1) * pageSize; -->
+   </select>
+   
+      
+   <!-- 부서관리 목록 총 갯수 조회 -->
+   <select id="deptCount" resultType="int">
+      /*kr.kosmo.jobkorea.system.dao.deptMgrDao.deptCount*/
+      SELECT COUNT(*)
+      FROM    tb_dept
+       <where>
+         <if test ="(dept_nm != null) and (!dept_nm.equals(''))">
+             and dept_name Like CONCAT('%', #{dept_nm}, '%') 
+         </if>
+       </where>
+      ORDER BY dept_cd DESC
+   </select>   
+   
+   
+   <!-- 부서관리 단건 조회 : 부서코드 클릭시 -->
+   <select id = "deptdetail" resultType = "kr.happyjob.study.system.model.DeptMgrModel">
+      SELECT dept_cd, dept_name           
+      FROM   tb_dept
+      WHERE  dept_cd = #{deptNo}  
+   </select>
+         
+    <!-- DB데이터를 뽑아 count 하여 중복인지 체크 0이면 중복아님-->
+    <select id="duplication" parameterType="hashmap" resultType="int">
+     SELECT COUNT(*)           
+      FROM   tb_dept
+      WHERE  dept_cd = #{dept_cd} 
+    </select>
+               
+   <!-- 부서관리 신규등록(저장) :  -->
+   <insert id = "insertDept" parameterType="java.util.Map">
+      INSERT
+      INTO       tb_dept
+            (
+                 dept_cd, dept_name
+            )
+      VALUES
+            (
+                 #{dept_cd}
+               , #{dept_nm}
+            )
+   </insert>
+   
+   
+   <!-- 부서코드 수정-->
+   <update id = "updateDept">
+      UPDATE tb_dept    <!-- 테이블 -->
+      SET    dept_name = #{dept_nm}    <!-- 열 = '변경할값' -->
+      WHERE  dept_cd = #{dept_cd}  <!-- 조건 -->
+   </update>
+   
+   
+   <!-- 부서코드 삭제-->
+   <delete id="deptdelete">
+      DELETE
+      FROM   tb_dept
+      WHERE  dept_cd = #{dept_cd}  
+   </delete>
+
+</mapper>

@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 맵퍼네임 -->
+<mapper namespace="kr.happyjob.study.business.dao.ReceiveManagementDao">
+	<!-- 거래처 목록 조회 -->
+	<select id="selectClientList" resultType="kr.happyjob.study.business.vo.ErpClientVo">
+		/*kr.happyjob.study.system.dao.ReceiveManagementDao.selectClientList*/
+		SELECT
+			b.client_cd clientCd,
+			CONCAT(b.estimate_no,'@', a.client_nm) AS clientNm
+		FROM
+			tb_erp_client a
+		INNER JOIN estimate_info b ON a.client_cd = b.client_cd
+		WHERE
+			b.loginID = #{loginId}
+		AND
+		    b.receive_yn = 'n'	/* 수주처리가 안된 거래처만 출력 */
+	</select>
+
+	<!-- 1.  수주서 테이블 목록 조회 -->
+	<select id="ReceiveList" resultType="kr.happyjob.study.business.dto.ReceiveListDto" parameterType ="hashmap">
+		SELECT DISTINCT
+				tu.name,
+				a.client_cd clientCd,
+				e.client_nm clientNm,
+				e.emp_nm empNm,
+				a.receive_no receiveNo,
+				DATE_FORMAT(a.receive_date,'%Y-%m-%d') as receiveDate,
+				a.sum_total sumTotal,
+				a.supply_amount supplyAmount,
+				tu.loginID loginId,
+				a.estimate_no estimateNo
+		FROM
+				estimate_info a
+        INNER JOIN  tb_erp_client e ON e.client_cd = a.client_cd
+        INNER JOIN  tb_userinfo tu ON tu.loginID = a.loginID
+
+		<where>
+            AND a.receive_no IS NOT NULL
+			<if test="(client_search != null) and (! client_search.equals(''))">
+            	AND a.client_cd like #{client_search}
+         	</if>
+         	<if test="(from_date != null) and (! from_date.equals(''))">
+  			 	AND a.receive_date  <![CDATA[>=]]> STR_TO_DATE(#{from_date}, '%Y%m%d%H%i%s')
+         	</if>
+         	<if test="(to_date != null) and (!to_date.equals(''))">
+         		AND a.receive_date  <![CDATA[<=]]> STR_TO_DATE(#{to_date}, '%Y%m%d%H%i%s')
+         	</if>         
+		</where>
+		ORDER BY a.receive_date DESC
+		LIMIT #{pageIndex}, #{pageSize}
+	</select>
+	
+	<!-- 2. 전체 목록 카운트  -->
+	<select id="receiveCnt" resultType="int"  parameterType="hashmap">
+	<!-- SELECT COUNT(estimate_no) 검색 및 전체 목록 뿌릴때의 카운트, cliCnt
+		 FROM estimate_info -->
+		SELECT  
+				COUNT(receive_no)
+		FROM 
+				estimate_info
+
+		<where>
+			<if test="(client_search != null) and (! client_search.equals(''))">
+            	AND client_cd  = #{client_search} <!-- 카운트 값 매칭 -->
+         	</if>
+         	<if test="(from_date != null) and (! from_date.equals(''))">
+				AND receive_date  <![CDATA[>=]]> STR_TO_DATE(#{from_date}, '%Y%m%d%H%i%s')
+         	</if>
+         	<if test="(to_date != null) and (!to_date.equals(''))">
+	         	AND receive_date  <![CDATA[<=]]> STR_TO_DATE(#{to_date}, '%Y%m%d%H%i%s')
+         	</if>         
+      	</where>
+	</select>
+
+	<select id="InsertReceiveInfo" resultType="kr.happyjob.study.business.vo.EstimateInfoVo">
+		SELECT
+				receive_no receiveNo,
+				loginID loginId,
+				client_cd clientCd,
+				estimate_no estimateNo,
+				supply_val supplyVal,
+				supply_tax supplyTax,
+				supply_cost supplyCost,
+				supply_amount supplyAmount,
+				receive_date receiveDate,
+				deposit_yn depositYN,
+				sum_total sumTotal,
+				remarks,
+				receive_remarks receiveRemarks,
+				receive_date receiveDate,
+				deposit_yn depositYN,
+				receive_yn receiveYN
+		FROM
+		    	estimate_info
+		WHERE
+		    	receive_no = (
+									SELECT max(receive_no)
+									FROM estimate_info
+									WHERE client_cd = #{clientCd}
+									AND estimate_no = #{estimateNo}
+							   )
+		AND
+		    	client_cd = #{clientCd}
+		AND
+		    	estimate_no = #{estimateNo}
+	</select>
+
+	<select id="searchReceiveInfo" resultType="kr.happyjob.study.business.vo.EstimateInfoVo">
+		SELECT
+			receive_no receiveNo,
+			loginID loginId,
+			client_cd clientCd,
+			estimate_no estimateNo,
+			supply_val supplyVal,
+			supply_tax supplyTax,
+			supply_cost supplyCost,
+			supply_amount supplyAmount,
+			receive_date receiveDate,
+			deposit_yn depositYN,
+			sum_total sumTotal,
+			remarks,
+			receive_remarks receiveRemarks,
+			receive_date receiveDate,
+			deposit_yn depositYN,
+			receive_yn receiveYN
+		FROM
+			estimate_info
+		WHERE
+			receive_no = #{receiveNo}
+		AND
+			client_cd = #{clientCd}
+		AND
+			estimate_no = #{estimateNo}
+	</select>
+
+	<!-- 3. 단건조회  -->
+	<select id ="selectReceiveList" resultType ="kr.happyjob.study.business.dto.SelectReceiveListDto" parameterType ="hashmap">
+		SELECT
+		    a.receive_no receiveNo,
+			a.estimate_no estimateNo,
+			a.client_cd clientCd,
+			a.receive_date receiveDate,
+			a.sum_total sumTotal,
+			a.receive_remarks receiveRemarks,
+			a.loginID loginId,
+			b.cop_no1 copNo1,
+			b.cop_no2 copNo2,
+			b.cop_no3 copNo3,
+			b.client_nm clientNm,
+			b.emp_nm empNm,
+			b.emp_hp empHp,
+			b.addr,
+			b.addr_detail addrDetail,
+			c.name,
+			c.tel
+		FROM
+			estimate_info a
+				INNER JOIN tb_erp_client b ON a.client_cd = b.client_cd
+				INNER JOIN tb_userinfo c ON a.loginID = c.loginID
+		WHERE
+			a.estimate_no = #{estimateNo}
+		  AND
+			a.client_cd = #{clientCd}
+		  AND
+		    a.receive_no = #{receiveNo}
+	</select>
+
+	<!-- !!! 수주서 테이블 +  수주서 제품 테이블 + SCM order 인서트 -->
+	<!-- 수주서테이블 -->
+	<update id="receiveNoInsert" parameterType="hashmap">
+		UPDATE
+			estimate_info
+		SET
+		    receive_no = (
+		    				SELECT *
+		    				FROM (
+									SELECT
+										CONCAT (
+												c.client_cd,
+												'-',
+												DATE_FORMAT(NOW(),'%Y-%m-%d'),
+												'-',
+												LPAD(CAST((CAST(RIGHT(IFNULL(MAX(a.receive_no),
+												CONCAT(c.client_cd,DATE_FORMAT(NOW(),'%Y-%m-%d'))),3) AS unsigned) + 1) AS char),3,'0')
+											)
+									FROM
+										estimate_info a
+									INNER JOIN tb_erp_client c ON a.client_cd = c.client_cd
+									WHERE
+										a.client_cd = #{clientCd}
+									  AND
+										a.estimate_no = #{estimateNo}
+							) AS a
+		    ),
+		    receive_date = NOW(),
+		    receive_remarks = #{receiveRemarks},
+		    deposit_yn = 'n',
+		    receive_yn = 'y'
+		WHERE
+			estimate_no = #{estimateNo}
+		AND
+			client_cd = #{clientCd}
+	</update>
+
+	<select id="InsertTableSelect" resultType="kr.happyjob.study.business.dto.InsertTableSelectDto" parameterType="hashmap">
+		SELECT
+		    	a.receive_no receiveNo,
+				a.estimate_no estimateNo,
+				a.receive_date receiveDate,
+				a.receive_remarks receiveRemarks,
+				c.client_cd clientCd,
+				c.client_nm clientNm,
+				c.emp_nm empNm,
+				c.tel
+		FROM
+				estimate_info a
+		INNER JOIN tb_erp_client c ON a.client_cd = c.client_cd
+		WHERE
+				a.receive_no = (
+									SELECT max(receive_no)
+									FROM estimate_info
+									WHERE client_cd = #{clientCd}
+									AND estimate_no = #{estimateNo}
+							   )
+		AND
+				a.client_cd = #{clientCd}
+		AND
+		    	a.estimate_no = #{estimateNo}
+	</select>
+
+	<!-- 6. 모달 안 리스트 뿌리기  -->
+	<select id="receiveListDetail" resultType="kr.happyjob.study.business.dto.ReceiveListDetailDto" parameterType ="hashmap">
+		SELECT
+				a.receive_no receiveNo,
+				a.product_cd productCd,
+				a.estimate_no estimateNo,
+				a.client_cd clientCd,
+				a.price,
+				a.tax,
+				a.unit_cost unitCost,
+				a.estimate_cnt estimateCnt,
+				a.sum_amount sumAmount,
+				DATE_FORMAT(a.our_deadline,'%Y-%m-%d') as ourDeadline,
+				DATE_FORMAT(b.receive_date,'%Y-%m-%d') as receiveDate,
+				c.client_nm clientNm,
+				d.product_nm productNm
+		FROM
+				estimate_prod a
+					INNER JOIN estimate_info b ON a.client_cd = b.client_cd
+					AND a.estimate_no = b.estimate_no
+					AND a.receive_no = b.receive_no
+					INNER JOIN tb_erp_client c ON b.client_cd = c.client_cd
+					INNER JOIN tb_scm_product d ON a.product_cd = d.product_cd
+		WHERE
+				a.estimate_no = #{estimateNo}
+		AND
+				a.client_cd = #{clientCd}
+		AND
+				a.receive_no = #{receiveNo}
+	</select>
+
+	<!-- 7.모달 안 리스트 뿌리기 카운트  -->
+	<select id="receiveDetailCnt" resultType="int" parameterType="hashmap">
+		SELECT
+				COUNT(estimate_no)
+		FROM
+				estimate_prod
+		WHERE
+				estimate_no = #{estimateNo}
+		AND
+				client_cd = #{clientCd}
+		AND
+		    	receive_no = #{receiveNo}
+	</select>
+
+	<!-- estimateProd 결과 가져오기 -->
+	<select id="estimateProdList" parameterType="hashmap" resultType="kr.happyjob.study.business.vo.EstimateProdVo">
+		SELECT
+			estimate_no estimateNo,
+			receive_no receiveNo,
+			client_cd clientCd,
+			product_cd productCd,
+			estimate_cnt estimateCnt,
+			unit_cost unitCost,
+			price,
+			tax,
+			our_deadline ourDeadline,
+			sum_amount sumAmount
+		FROM
+		    estimate_prod
+		WHERE
+		    estimate_no = #{estimateNo}
+		AND
+		    client_cd = #{clientCd}
+	</select>
+
+	<!-- 수주서 제품 테이블 인서트 -->
+	<update id="receiveProdInsert" parameterType="hashmap">
+		UPDATE
+			estimate_prod
+		SET
+		    receive_no = #{receiveNo}
+		WHERE
+			estimate_no = #{estimateNo}
+		AND
+			client_cd = #{clientCd}
+	</update>
+
+	<!-- 5.단건삭제 -->
+	<update id="receiveInfoDelete" parameterType="hashmap">
+		UPDATE estimate_info
+		SET
+			receive_no = NULL,
+			receive_remarks = NULL,
+			receive_date = NULL,
+			deposit_yn = 'n',
+			receive_yn = 'n'
+		WHERE estimate_no = #{estimateNo}
+		  AND
+			client_cd = #{clientCd}
+	</update>
+
+	<!-- scm order table -->
+	<insert id ="insertScmOrder" parameterType="hashmap">
+		<selectKey keyProperty="order_cd" resultType="String" order="BEFORE">
+			SELECT
+			    	CAST((IFNULL(MAX(cast(order_cd as unsigned)),0) + 1) as CHAR(20))
+			FROM
+			    	tb_scm_order
+		</selectKey>
+		INSERT INTO tb_scm_order (
+				order_cd,
+				total_price,
+		        order_date,
+		        request,
+		        state,
+		        loginID
+		) VALUES (
+				#{order_cd},
+		        #{totalPrice},
+		        #{orderDate},
+		        #{request},
+		        '1',
+		        #{loginId}
+		)
+	</insert>
+
+	<select id="receiveOrderDetail" parameterType="hashmap" resultType="kr.happyjob.study.business.dto.ReceiveOrderDetailDto">
+		SELECT
+				a.receive_no receiveNo,
+				a.estimate_no estimateNo,
+				a.client_cd clientCd,
+				b.product_cd productCd,
+				a.sum_amount sumAmount,
+				a.estimate_cnt estimateCnt,
+				a.unit_cost unitCost,
+				a.our_deadline ourDeadline,
+				c.loginID loginId
+		FROM
+		    	estimate_prod a
+		INNER JOIN tb_scm_product b ON a.product_cd = b.product_cd
+		INNER JOIN estimate_info c ON a.estimate_no = c.estimate_no
+		AND a.client_cd = c.client_cd
+		WHERE
+		    	a.estimate_no = #{estimateNo}
+		AND
+		    	a.client_cd = #{clientCd}
+	</select>
+
+	<insert id="orderDetailInsert" parameterType="java.util.List">
+		INSERT INTO tb_scm_order_detail(
+				order_cd,
+				product_cd,
+				order_cnt,
+				sum_price,
+				want_recieve_date,
+				price
+		) VALUES
+		<foreach collection="list" item="item" separator=",">
+			(
+				 (
+				     SELECT MAX(order_cd)
+				     FROM tb_scm_order
+				     WHERE loginID = #{item.loginId}
+				 ),
+				 #{item.productCd},
+				 #{item.estimateCnt},
+				 #{item.sumAmount},
+				 #{item.ourDeadline},
+				 #{item.unitCost}
+			)
+		</foreach>
+	</insert>
+</mapper>

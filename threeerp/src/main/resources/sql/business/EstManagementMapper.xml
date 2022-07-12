@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 맵퍼네임 -->
+<mapper namespace="kr.happyjob.study.business.dao.EstManagementDao">
+	<!-- 1.  견적 테이블 목록 조회 -->
+	<select id="estList" resultType="kr.happyjob.study.business.dto.EstListDto" parameterType ="hashmap" >
+		SELECT
+		    	a.estimate_no estimateNo,
+				DATE_FORMAT(a.estimate_date,'%Y-%m-%d')  as estimateDate,
+				a.client_cd clientCd,
+				a.supply_amount supplyAmount,
+				b.client_nm clientNm,
+				e.name,
+				e.mail,
+				e.loginID loginId
+		FROM
+		    	estimate_info a
+        INNER JOIN tb_erp_client b ON a.client_cd = b.client_cd
+        INNER JOIN tb_userinfo e ON a.loginID = e.loginID
+		<where>
+        	<if test="(client_search != null) and (! client_search.equals(''))">
+            	AND a.client_cd LIKE #{client_search}
+         	</if>
+         	<if test="(from_date != null) and (! from_date.equals(''))">
+  				AND a.estimate_date  <![CDATA[>=]]> STR_TO_DATE(#{from_date}, '%Y%m%d%H%i%s')
+         	</if>
+         	<if test="(to_date != null) and (!to_date.equals(''))">
+         		AND a.estimate_date  <![CDATA[<=]]> STR_TO_DATE(#{to_date}, '%Y%m%d%H%i%s')
+         	</if>
+      	</where>
+
+		ORDER BY a.estimate_date DESC
+		LIMIT #{pageIndex}, #{pageSize}
+	</select>
+
+	<!-- 2. 전체 목록 카운트  -->
+	<select id="estCnt" resultType="int"  parameterType="hashmap">
+		SELECT
+		    	COUNT(estimate_no)
+		FROM
+		    	estimate_info
+
+		<where>
+			<if test="(client_search != null) and (! client_search.equals(''))">
+				AND client_cd  = #{client_search} <!-- 카운트 값 매칭 -->
+			</if>
+			<if test="(from_date != null) and (! from_date.equals(''))">
+				AND estimate_date  <![CDATA[>=]]> STR_TO_DATE(#{from_date}, '%Y%m%d%H%i%s')
+			</if>
+			<if test="(to_date != null) and (!to_date.equals(''))">
+				AND estimate_date  <![CDATA[<=]]> STR_TO_DATE(#{to_date}, '%Y%m%d%H%i%s')
+			</if>
+		</where>
+	</select>
+
+	<!-- 3. 단건조회  -->
+	<select id ="selectEstList" resultType ="kr.happyjob.study.business.dto.SelectEstListDto" parameterType ="hashmap">
+		SELECT
+				a.estimate_no estimateNo,
+				a.client_cd clientCd,
+				a.estimate_date estimateDate,
+				a.supply_val supplyVal,
+				a.supply_tax supplyTax,
+				a.supply_cost supplyCost,
+				a.sum_total sumTotal,
+				a.remarks,
+				a.loginID loginId,
+		   		b.cop_no1 copNo1,
+				b.cop_no2 copNo2,
+				b.cop_no3 copNo3,
+				b.client_nm clientNm,
+				b.emp_nm empNm,
+				b.emp_hp empHp,
+				b.addr,
+				b.addr_detail addrDetail,
+				c.name,
+				c.tel
+		FROM
+		    	estimate_info a
+		INNER JOIN tb_erp_client b ON a.client_cd = b.client_cd
+		INNER JOIN tb_userinfo c ON a.loginID = c.loginID
+		WHERE
+		    	a.estimate_no = #{estimateNo}
+		AND
+		    	a.client_cd = #{clientCd}
+	</select>	
+	
+	<!-- !!! 견적서 테이블 +  견적서 제품 테이블 인서트 -->
+	<!-- 견적서테이블 -->
+	<insert id="insertEstList" >
+		<selectKey resultType="String" keyProperty="estimateNo" order="BEFORE">
+			SELECT
+					CONCAT(b.client_cd,'-',DATE_FORMAT(NOW(),'%Y-%m-%d'),
+					'-',
+					LPAD(CAST((CAST(RIGHT(IFNULL(MAX(a.estimate_no),
+					CONCAT(b.client_cd,DATE_FORMAT(NOW(),'%Y-%m-%d'))),3) AS unsigned) + 1) AS char),3,'0'))
+			FROM
+			    	estimate_info a
+			INNER JOIN  tb_erp_client b ON a.client_cd = b.client_cd
+			WHERE
+			    	b.client_cd = #{clientCd}
+	    </selectKey>
+	
+		INSERT INTO	estimate_info (
+				estimate_no,
+				client_cd,
+				estimate_date,
+		        loginID,
+		        remarks,
+		        receive_yn
+		) VALUES (
+				#{estimateNo},
+				#{clientCd},
+				NOW(),
+		      	#{loginId},
+		      	#{remarks},
+		        'n'
+		);
+	</insert>
+
+	<select id="InsertEstimateInfo" resultType="kr.happyjob.study.business.vo.EstimateInfoVo" parameterType="hashmap">
+		SELECT
+		    	estimate_no estimateNo,
+		    	client_cd clientCd,
+		    	estimate_date estimateDate,
+		    	supply_val supplyVal,
+		    	supply_tax supplyTax,
+		    	supply_cost supplyCost,
+		    	loginID loginId,
+		    	sum_total sumTotal,
+		    	remarks
+		FROM
+		    	estimate_info
+		WHERE
+				estimate_no = (
+					SELECT max(estimate_no)  <!--  String타입이라도 마지막에 들어온 번호가 나옴 -->
+					FROM estimate_info
+					WHERE client_cd = #{clientCd}
+				)
+		AND
+				client_cd = #{clientCd}
+	</select>
+
+	<select id="UpdateEstimateInfo" resultType="kr.happyjob.study.business.vo.EstimateInfoVo" parameterType="hashmap">
+		SELECT
+				estimate_no estimateNo,
+				client_cd clientCd,
+				estimate_date estimateDate,
+				supply_val supplyVal,
+				supply_tax supplyTax,
+				supply_cost supplyCost,
+				loginID loginId,
+				sum_total sumTotal,
+				remarks
+		FROM
+				estimate_info
+		WHERE
+				estimate_no = #{estimateNo}
+		AND
+				client_cd = #{clientCd}
+	</select>
+
+	<select id="InsertTableSelect" resultType="kr.happyjob.study.business.dto.InsertTableSelectDto" parameterType="hashmap">
+		SELECT
+				a.estimate_no estimateNo,
+				a.estimate_date estimateDate,
+				a.remarks,
+				b.client_cd clientCd,
+				b.client_nm clientNm,
+				b.emp_nm empNm,
+				b.tel
+		FROM
+		    	estimate_info a
+		INNER JOIN tb_erp_client b ON a.client_cd = b.client_cd
+		WHERE
+				estimate_no = (
+									SELECT max(estimate_no)  <!--  String타입이라도 마지막에 들어온 번호가 나옴 -->
+									FROM estimate_info
+									WHERE client_cd = #{clientCd}
+							   )
+		AND
+				a.client_cd = #{clientCd}
+	</select>
+
+	<select id="UpdateTableSelect" resultType="kr.happyjob.study.business.dto.InsertTableSelectDto" parameterType="hashmap">
+		SELECT
+				a.estimate_no estimateNo,
+				a.estimate_date estimateDate,
+				a.remarks,
+				b.client_cd clientCd,
+				b.client_nm clientNm,
+				b.emp_nm empNm,
+				b.tel
+		FROM
+				estimate_info a
+		INNER JOIN tb_erp_client b ON a.client_cd = b.client_cd
+		WHERE
+				estimate_no = #{estimateNo}
+		AND
+				a.client_cd = #{clientCd}
+	</select>
+
+	<!-- 견적서제품 테이블 인서트 -->
+	<insert id ="updateInsertEstList">
+		INSERT INTO estimate_prod (
+				estimate_no,
+				client_cd,
+				product_cd,
+				estimate_cnt,
+				unit_cost,
+				tax,
+				price,
+		        sum_amount,
+		        our_deadline
+		) VALUES(
+				#{estimateNo},
+				#{clientCd},
+				#{productCd},
+				#{estimateCnt},
+				#{unitCost},
+		        #{tax},
+		        #{price},
+		        #{sumAmount},
+		        #{ourDeadline}
+		)
+	</insert>
+
+	<select id="searchProductCd" resultType="int" parameterType="hashmap">
+		SELECT
+		    	price
+		FROM
+		    	tb_scm_product
+		WHERE
+		    	product_cd = #{productCd}
+	</select>
+
+	<delete id="deleteEstProd">
+		DELETE FROM estimate_prod
+		WHERE	estimate_no = #{estimateNo}
+		AND		client_cd = #{clientCd}
+		AND		product_cd = #{productCd}
+	</delete>
+	
+	<!-- 5.단건삭제 -->
+	<delete id="deleteEstList">
+		DELETE FROM estimate_info
+		WHERE estimate_no = #{estimate_no}
+	</delete>
+	
+	<!-- 6. 모달 안 리스트 뿌리기  -->
+	<select id="estListDetail" resultType="kr.happyjob.study.business.dto.EstListDetailDto" parameterType ="hashmap">
+		SELECT
+				a.estimate_no estimateNo,
+				a.client_cd clientCd,
+				a.price,
+				a.tax,
+				a.unit_cost unitCost,
+				a.product_cd productCd,
+				a.estimate_cnt estimateCnt,
+				a.sum_amount sumAmount,
+				DATE_FORMAT(a.our_deadline,'%Y-%m-%d') as ourDeadline,
+				DATE_FORMAT(b.estimate_date,'%Y-%m-%d') as estimateDate,
+				c.client_nm clientNm,
+				d.product_nm productNm
+		FROM
+				estimate_prod a
+		INNER JOIN estimate_info b ON a.client_cd = b.client_cd
+		AND a.estimate_no = b.estimate_no
+		INNER JOIN tb_erp_client c ON b.client_cd = c.client_cd
+		INNER JOIN tb_scm_product d ON a.product_cd = d.product_cd
+		WHERE
+		    	a.estimate_no = #{estimateNo}
+		AND
+				a.client_cd = #{clientCd}
+	</select>
+	
+	<!-- 7.모달 안 리스트 뿌리기 카운트  -->
+	<select id="estDetailCnt" resultType="int" parameterType="hashmap">
+		SELECT
+				COUNT(estimate_no)
+		FROM
+				estimate_prod
+		WHERE
+		    	estimate_no = #{estimateNo}
+		AND
+				client_cd = #{clientCd}
+	</select>
+
+	<select id="searchLoginId" resultType="kr.happyjob.study.business.vo.UserInfoVo" parameterType="String">
+		SELECT
+		    	name,
+		    	mail,
+		    	tel
+		FROM
+		    	tb_userinfo
+		WHERE
+		    	user_type = 'D'
+		AND
+		    	loginID = #{value}
+	</select>
+
+	<select id="searchClient" resultType="kr.happyjob.study.business.vo.ErpClientVo" parameterType="hashmap">
+		SELECT
+		    	client_cd clientCd,
+		    	emp_nm empNm,
+		    	emp_hp empHp
+		FROM
+		    	tb_erp_client
+		WHERE
+		    	client_cd = #{clientCd}
+	</select>
+
+	<update id="estUpdateInfo" parameterType="hashmap">
+		UPDATE
+		    	estimate_info
+		SET
+		    	supply_val = REPLACE(#{supplyVal},',',''),
+		    	supply_tax = REPLACE(#{supplyTax},',',''),
+		    	supply_cost = REPLACE(#{supplyCost},',',''),
+		    	sum_total = REPLACE(#{sumTotal},',',''),
+		    	supply_amount = REPLACE(#{supplyAmount},',','')
+		WHERE
+		    	estimate_no = #{estimateNo}
+		AND
+		    	client_cd = #{clientCd}
+	</update>
+
+	<update id="estimateInfoUpdate" parameterType="hashmap">
+		UPDATE
+			estimate_info
+		SET
+			client_cd = #{clientCd},
+			remarks = #{remarks}
+		WHERE
+			estimate_no = #{estimateNo}
+		  AND
+			client_cd = #{clientCdBefore}
+	</update>
+
+	<delete id="estimateInfoDelete" parameterType="hashmap">
+		DELETE FROM
+		        estimate_info
+		WHERE
+		    	estimate_no = #{estimateNo}
+		AND
+		    	client_cd = #{clientCd}
+	</delete>
+</mapper>

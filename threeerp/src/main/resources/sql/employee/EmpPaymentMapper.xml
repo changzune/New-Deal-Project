@@ -1,0 +1,681 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="kr.happyjob.study.employee.dao.EmpPaymentDao">
+	
+	<!-- 급여지급내역 전체조회 -->
+	<select id = "empPaymentList" resultType = "kr.happyjob.study.employee.model.EmployeeModel">
+		<!-- 조회날짜가 이번달일경우 -->
+		<if test = "(flag != null) and (flag eq '1'.toString())">
+		    SELECT DATE_FORMAT(sh.payment_date, '%Y-%m-%d') as payment_date
+              , dp.dept_name AS 'dept_name'
+              , pc.detail_name AS 'POScd'
+              , ui.loginID
+              , ui.name
+              , emp.year_salary
+              , CASE  <!-- 만약 전 달에 입사했다면 입사일로부터 저번달 일수를 계산하여 이번달에 입금해야할 월급을 계산 
+              			    만약 이번 달에 입사했다면 지급할월급은 0원이다. 
+              			    나머지는 그냥 월급 데로 줌 -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN ROUND((emp.salary/CAST(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'              
+              	  ELSE emp.salary
+                END AS salary
+              , CASE <!-- 국민 연금 계산
+           				만약 저번달에 입사했다면 국민 연금은 0 이다.
+           				만약 이번달에 입사헸다면 국민 연금은 0 이다.
+           				나머지는 그냥 데이터 베이스에 입력된 국민연금이다. 
+           				 -->
+               	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN '0'
+             	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+                  ELSE emp.nat_ps
+                END AS nat_ps
+              , CASE <!-- 건강 보험 계산  -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN '0'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+                  ELSE emp.h_insure
+                END AS h_insure
+              , CASE <!-- 산재 보험 계산 -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN '0'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+                  ELSE emp.ohs_insure
+                END AS ohs_insure
+              , CASE <!-- 고용 보험 계산 -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN '0'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+                  ELSE emp.e_insure
+                END AS e_insure
+              , CASE <!-- 소득세 계산 -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                 		THEN '0'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+                  ELSE emp.income_tax
+                END AS income_tax
+              , al.extra_pay
+              , CASE <!-- 실급여 계산 -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN '0'  
+              	  ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+                END AS net_pay
+             , (SELECT COUNT(*) 
+                   FROM tb_sal_his sl
+                WHERE emp.loginID = sl.loginID AND DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date})AS payment_st
+             , CASE <!-- 입사 타입컬럼 저번달 입사면 B 이번달입사면 T 그게 아니라면 N -->
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN 'B'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN 'T'  
+                  ELSE 'N'
+               END AS entry_type
+             , emp.oamt
+         FROM tb_emp emp
+            INNER JOIN tb_userinfo ui ON ui.loginID = emp.loginID
+            LEFT OUTER JOIN (<!-- 지출금액합계  -->
+            				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+                                 FROM tb_dv_info di
+                                 <!-- 클라이언트에서 선택한 날짜 마이너스 -1달과 비용을 사용한 날짜가 같은것만  -->
+                           	 WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+                          	 GROUP BY di.loginID
+                         ) al ON emp.loginID = al.loginID
+            LEFT JOIN (SELECT dc.detail_name, dc.detail_code
+                     FROM tb_detail_code dc 
+                     <!-- 상세코드에 직급이 같은걸로 조인 -->
+                  WHERE dc.group_code = 'POScd')pc ON emp.POScd = pc.detail_code
+                 <!-- 부서코드에 부서가 같은걸로 조인 -->
+            LEFT JOIN (SELECT dc.dept_cd, dc.dept_name
+                     FROM tb_dept dc)dp ON emp.dept_cd = dp.dept_cd
+                     <!-- 급여지급이력에 아이디가 같고 급여지급날짜가 클라이언트에서 가져온 날짜값과 일치하는것 -->
+            LEFT OUTER JOIN tb_sal_his sh on sh.loginID	= emp.loginID and DATE_FORMAT(sh.payment_date, '%Y-%m') = #{from_date}
+			<where>
+			<!-- 검색 조건 -->
+				emp.out_yn = 'n'
+				<if test = "(searchKey_dept != null) and (!searchKey_dept.equals(''))">
+					AND emp.dept_cd = #{searchKey_dept}
+				</if>
+				<if test = "(searchKey_poscd != null) and (!searchKey_poscd.equals(''))">
+					AND emp.POScd = #{searchKey_poscd}
+				</if>
+				<if test="(searchKey != null) and (!searchKey.equals(''))">
+					<choose>
+						<when test="(searchKey != null) and (searchKey eq 'loginID'.toString())">
+							AND ui.loginID LIKE CONCAT('%', #{searchWord}, '%')
+						</when>
+						<when test="(searchKey != null) and (searchKey eq 'name'.toString())">
+							AND ui.name Like CONCAT('%', #{searchWord}, '%')
+						</when>
+					</choose>
+				</if>
+				<if test ="(payment_state != null) and (!payment_state.equals(''))">
+					<choose>
+						<when test = "(payment_state != null) and (payment_state eq '0'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '0'
+						</when>
+						<when test = "(payment_state != null) and (payment_state eq '1'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '1'
+						</when>
+					</choose>
+				</if>
+			</where>
+			ORDER BY emp.loginID DESC
+			<if test ="(pageIndex != null) and (!pageIndex.equals('')) || (pageSize != null) and (!pageSize.equals(''))">
+				LIMIT #{pageIndex}, #{pageSize}
+			</if>
+		</if>
+		<!-- 조회날짜가 이번달이 아닌경우 -->
+		<if test = "(flag != null) and (flag eq '2'.toString())">
+		    SELECT DATE_FORMAT(sl.payment_date, '%Y-%m-%d') as 'payment_date'
+		    	 , dp.dept_name AS 'dept_name'
+		    	 , pc.detail_name AS 'POScd'
+		    	 , ui.loginID
+		    	 , ui.name
+		    	 , sl.year_salary
+		    	 , sl.salary
+		    	 , sl.nat_ps
+		    	 , sl.h_insure
+		    	 , sl.ohs_insure
+		    	 , sl.e_insure
+		    	 , sl.income_tax
+		    	 , al.extra_pay
+		    	 , emp.oamt
+		    	 , CASE
+      				WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+      				THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+      				ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+      			   END AS net_pay
+		    	 , (SELECT COUNT(*) 
+				 		FROM tb_sal_his sl
+						WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date})as payment_st
+			FROM tb_sal_his sl
+				INNER JOIN tb_userinfo ui ON ui.loginID = sl.loginID
+				LEFT OUTER JOIN tb_emp emp ON emp.loginID = sl.loginID
+				LEFT OUTER JOIN (
+	            				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+	                                 FROM tb_dv_info di
+	                           	 WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+	                          	 GROUP BY di.loginID
+	                         ) al ON emp.loginID = al.loginID
+				LEFT JOIN (SELECT dc.detail_name, dc.detail_code
+							FROM tb_detail_code dc 
+					   WHERE dc.group_code = 'POScd')pc ON emp.POScd = pc.detail_code
+				LEFT JOIN (SELECT dc.dept_cd, dc.dept_name
+							FROM tb_dept dc)dp ON emp.dept_cd = dp.dept_cd
+			<where><!-- 검색 조건 -->
+				DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}
+				<if test = "(searchKey_dept != null) and (!searchKey_dept.equals(''))">
+					AND emp.dept_cd = #{searchKey_dept}
+				</if>
+				<if test = "(searchKey_poscd != null) and (!searchKey_poscd.equals(''))">
+					AND emp.POScd = #{searchKey_poscd}
+				</if>
+				<if test="(searchKey != null) and (!searchKey.equals(''))">
+					<choose>
+						<when test="(searchKey != null) and (searchKey eq 'loginID'.toString())">
+							AND ui.loginID LIKE CONCAT('%', #{searchWord}, '%')
+						</when>
+						<when test="(searchKey != null) and (searchKey eq 'name'.toString())">
+							AND ui.name Like CONCAT('%', #{searchWord}, '%')
+						</when>
+					</choose>
+				</if>
+				<if test ="(payment_state != null) and (!payment_state.equals(''))">
+					<choose>
+						<when test = "(payment_state != null) and (payment_state eq '0'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '0'
+						</when>
+						<when test = "(payment_state != null) and (payment_state eq '1'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '1'
+						</when>
+					</choose>
+				</if>
+			</where>
+			ORDER BY sl.loginID DESC
+				LIMIT #{pageIndex},#{pageSize}
+		</if>		
+	</select>
+	
+	<!-- 급여지급내역 전체조회 총 글 수 가져오기 -->
+	<select id = "countEmpPaymentList" resultType = "int">
+		<if test = "(flag != null) and (flag eq '1'.toString())">
+			SELECT COUNT(*) AS tot_cnt 
+				FROM tb_emp emp
+			INNER JOIN tb_userinfo ui ON ui.loginID = emp.loginID
+			<where><!-- 검색 조건 -->
+				<if test = "(searchKey_dept != null) and (!searchKey_dept.equals(''))">
+					AND emp.dept_cd = #{searchKey_dept}
+				</if>
+				<if test = "(searchKey_poscd != null) and (!searchKey_poscd.equals(''))">
+					AND emp.POScd = #{searchKey_poscd}
+				</if>
+				<if test="(searchKey != null) and (!searchKey.equals(''))">
+					<choose>
+						<when test="(searchKey != null) and (searchKey eq 'loginID'.toString())">
+							AND ui.loginID LIKE CONCAT('%', #{searchWord}, '%')
+						</when>
+						<when test="(searchKey != null) and (searchKey eq 'name'.toString())">
+							AND ui.name Like CONCAT('%', #{searchWord}, '%')
+						</when>
+					</choose>
+				</if>
+				<if test ="(payment_state != null) and (!payment_state.equals(''))">
+					<choose>
+						<when test = "(payment_state != null) and (payment_state eq '0'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '0'
+						</when>
+						<when test = "(payment_state != null) and (payment_state eq '1'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '1'
+						</when>
+					</choose>
+				</if>
+			</where>
+			AND emp.out_yn = 'n'
+		</if>
+		
+		<if test = "(flag != null) and (flag eq '2'.toString())">
+			SELECT COUNT(*) AS tot_cnt 
+				FROM tb_sal_his sl
+				INNER JOIN tb_userinfo ui ON ui.loginID = sl.loginID
+				LEFT OUTER JOIN tb_emp emp ON emp.loginID = sl.loginID
+				LEFT OUTER JOIN (
+	            				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+	                                 FROM tb_dv_info di
+	                           	 WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+	                          	 GROUP BY di.loginID
+	                         ) al ON emp.loginID = al.loginID
+			<where><!-- 검색 조건 -->
+				DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}
+				<if test = "(searchKey_dept != null) and (!searchKey_dept.equals(''))">
+					AND emp.dept_cd = #{searchKey_dept}
+				</if>
+				<if test = "(searchKey_poscd != null) and (!searchKey_poscd.equals(''))">
+					AND emp.POScd = #{searchKey_poscd}
+				</if>
+				<if test="(searchKey != null) and (!searchKey.equals(''))">
+					<choose>
+						<when test="(searchKey != null) and (searchKey eq 'loginID'.toString())">
+							AND ui.loginID LIKE CONCAT('%', #{searchWord}, '%')
+						</when>
+						<when test="(searchKey != null) and (searchKey eq 'name'.toString())">
+							AND ui.name Like CONCAT('%', #{searchWord}, '%')
+						</when>
+					</choose>
+				</if>
+				<if test ="(payment_state != null) and (!payment_state.equals(''))">
+					<choose>
+						<when test = "(payment_state != null) and (payment_state eq '0'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '0'
+						</when>
+						<when test = "(payment_state != null) and (payment_state eq '1'.toString())">
+							AND (SELECT COUNT(*) 
+				 				FROM tb_sal_his sl
+							WHERE emp.loginID = sl.loginID and DATE_FORMAT(sl.payment_date, '%Y-%m') = #{from_date}) = '1'
+						</when>
+					</choose>
+				</if>
+			</where>
+		</if>
+	</select>
+	
+	<!-- 급여지급내역 상세조회 -> 사원 정보 가져오기 -->
+	<select id = "viewEmpDtlPayment"  resultType = "kr.happyjob.study.employee.model.EmployeeModel">
+		SELECT ui.loginID, ui.name, dp.dept_name AS 'dept_name', pc.detail_name AS 'POScd', emp.entry_date,
+			  CASE
+                  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  		THEN 'B'
+              	  WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  		THEN 'T'  
+                  ELSE 'N'
+               END AS entry_type
+			FROM tb_userinfo ui
+				INNER JOIN tb_emp emp ON ui.loginID = emp.loginID
+				LEFT JOIN (SELECT dc.detail_name, dc.detail_code
+							FROM tb_detail_code dc 
+					   WHERE dc.group_code = 'POScd')pc ON emp.POScd = pc.detail_code
+				LEFT JOIN (SELECT dc.dept_cd, dc.dept_name
+							FROM tb_dept dc)dp ON emp.dept_cd = dp.dept_cd
+		WHERE ui.loginID = #{loginID}
+	</select>
+	
+	<!-- 급여지급내역 상세조회 -->
+	<select id = "empDtlPaymentList"  resultType = "kr.happyjob.study.employee.model.EmployeeModel">
+		SELECT DATE_FORMAT(sl.payment_date, '%Y-%m-%d') as 'payment_date'
+			 , sl.year_salary
+		     , sl.salary
+		     , sl.nat_ps
+		     , sl.h_insure
+		     , sl.ohs_insure
+		     , sl.e_insure
+		     , sl.income_tax
+		     , al.extra_pay
+		     , CASE
+   					WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+   					THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+   					ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+   			   END AS net_pay
+		FROM tb_sal_his sl
+             LEFT OUTER JOIN (
+				            SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID, DATE_FORMAT(di.dv_use_date,'%Y%m') as dv_use_date
+  						  	  	FROM tb_dv_info di
+						    GROUP BY di.loginID, date_format(di.dv_use_date,'%Y%m')
+						 ) al ON sl.loginID = al.loginID AND al.dv_use_date = DATE_FORMAT(DATE_SUB(sl.payment_date,INTERVAL 1 month),'%Y%m')
+			 LEFT OUTER JOIN tb_emp emp ON emp.loginID = sl.loginID
+        WHERE sl.loginID = #{loginID}
+		ORDER BY sl.payment_date DESC
+		LIMIT #{pageIndex},#{pageSize}
+	</select>
+	
+	<!-- 급여지급내역 상세조회 총 글 수 가져오기 -->
+	<select id = "countEmpDtlPaymentList"  resultType = "int">
+		SELECT COUNT(*) AS tot_cnt
+			FROM tb_sal_his sl
+             LEFT OUTER JOIN (
+				            SELECT sum(ifnull(di.dv_amt,0)) AS extra_pay, di.loginID, date_format(di.dv_use_date,'%Y%m') as dv_use_date
+  						  	  FROM tb_dv_info di
+						    group by di.loginID, date_format(di.dv_use_date,'%Y%m')
+						 ) al ON sl.loginID = al.loginID AND al.dv_use_date = date_format(DATE_SUB(sl.payment_date,INTERVAL 1 month),'%Y%m')
+        WHERE sl.loginID = #{loginID}
+	</select>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_sal_his) -->
+	<insert id = "empPaymentProcess">
+	INSERT INTO tb_sal_his (loginID, pay_seq, year_salary, salary, nat_ps, h_insure, ohs_insure, e_insure, income_tax, net_pay, payment_date)
+	SELECT emp.loginID
+		 , (SELECT maxfield FROM
+		   (SELECT MAX(pay_seq) AS maxfield FROM tb_sal_his) AS sub_table) + 1 AS pay_seq
+		 , emp.year_salary
+		 , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'              
+         	 ELSE emp.salary
+           END AS salary
+         , CASE
+          	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN '0'
+        	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+             ELSE emp.nat_ps
+           END AS nat_ps
+         , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN '0'
+         	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+             ELSE emp.h_insure
+           END AS h_insure
+         , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN '0'
+         	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+             ELSE emp.ohs_insure
+           END AS ohs_insure
+         , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN '0'
+         	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+             ELSE emp.e_insure
+           END AS e_insure
+         , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+            		THEN '0'
+         	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+             ELSE emp.income_tax
+           END AS income_tax
+		 , CASE
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+             		THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+             		THEN '0'  
+         	 ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+           END AS net_pay
+      	 , DATE_FORMAT(now(), '%Y-%m-%d') AS payment_date
+	FROM tb_emp emp
+	LEFT OUTER JOIN (
+      				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+                     	FROM tb_dv_info di
+                     WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+                    	 GROUP BY di.loginID
+                    ) al ON emp.loginID = al.loginID
+	WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_acc_slip) 실급여 -->
+	<insert id = "empPaymentProcess_netpay">
+	INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+	SELECT (SELECT maxfield FROM
+		   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 , 'C300'
+		 , '301'
+		 , DATE_FORMAT(now(), '%Y-%m-%d')
+		 , CASE 
+      			WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+      			THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+      			ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+      	   END AS amt
+		 , #{loginID}
+	FROM tb_emp emp
+	LEFT OUTER JOIN (
+     				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+                        FROM tb_dv_info di
+                     WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+                   	 GROUP BY di.loginID
+                  	) al ON emp.loginID = al.loginID
+		WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_acc_slip) 국민연금 -->
+	<insert id = "empPaymentProcess_natps">
+	INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+	SELECT (SELECT maxfield FROM
+		   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 , 'C300'
+		 , '302'
+		 , DATE_FORMAT(now(), '%Y-%m-%d')
+		 , emp.nat_ps
+		 , #{loginID}
+	FROM tb_emp emp
+		WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_acc_slip) 건강보험 -->
+	<insert id = "empPaymentProcess_hinsure">
+	INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+	SELECT (SELECT maxfield FROM
+		   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 , 'C300'
+		 , '303'
+		 , DATE_FORMAT(now(), '%Y-%m-%d')
+		 , emp.h_insure
+		 , #{loginID}
+	FROM tb_emp emp
+		WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_acc_slip) 산재보험 -->
+	<insert id = "empPaymentProcess_ohsinsure">
+	INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+	SELECT (SELECT maxfield FROM
+		   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 , 'C300'
+		 , '304'
+		 , DATE_FORMAT(now(), '%Y-%m-%d')
+		 , emp.ohs_insure
+		 , #{loginID}
+	FROM tb_emp emp
+		WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 개인 지급(tb_acc_slip) 고용보험 -->
+	<insert id = "empPaymentProcess_einsure">
+	INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+	SELECT (SELECT maxfield FROM
+		   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 , 'C300'
+		 , '305'
+		 , DATE_FORMAT(now(), '%Y-%m-%d')
+		 , emp.e_insure
+		 , #{loginID}
+	FROM tb_emp emp
+		WHERE emp.loginID = #{loginID}
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_sal_his) -->
+	<insert id = "allEmpPayment">
+		INSERT INTO tb_sal_his (loginID, pay_seq, year_salary, salary, nat_ps, h_insure, ohs_insure, e_insure, income_tax, net_pay, payment_date)
+		SELECT emp.loginID
+			 , (SELECT maxfield FROM
+		   	   (SELECT MAX(pay_seq) AS maxfield FROM tb_sal_his) AS sub_table) + 1 AS pay_seq
+             , emp.year_salary
+             , CASE
+	             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+	               	THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)
+	             WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+	               	THEN '0'              
+	           	 ELSE emp.salary
+               END AS salary
+             , CASE
+              	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                 	THEN '0'
+            	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                 	THEN '0'  
+                 ELSE emp.nat_ps
+               END AS nat_ps
+             , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  	THEN '0'
+              	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  	THEN '0'  
+                 ELSE emp.h_insure
+               END AS h_insure
+             , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  	THEN '0'
+              	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  	THEN '0'  
+                 ELSE emp.ohs_insure
+               END AS ohs_insure
+             , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                 	THEN '0'
+             	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  	THEN '0'  
+                 ELSE emp.e_insure
+               END AS e_insure
+             , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                 	THEN '0'
+              	 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  	THEN '0'  
+                 ELSE emp.income_tax
+               END AS income_tax
+             , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  	THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(curdate(),'%Y%m')
+                  	THEN '0'  
+              	 ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+               END AS net_pay
+             , DATE_FORMAT(now(), '%Y-%m-%d') AS payment_date
+         FROM tb_emp emp
+            LEFT OUTER JOIN (
+            				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+                                 FROM tb_dv_info di
+                           	 WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+                          	 GROUP BY di.loginID
+                         ) al ON emp.loginID = al.loginID
+         WHERE emp.loginID NOT IN (
+                                   SELECT loginID
+                                   		FROM tb_sal_his
+                                   WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	  )
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_acc_slip) 실급여 -->
+	<insert id = "allEmpPayment_netpay">
+		INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+		SELECT (SELECT maxfield FROM
+		       (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		     , 'C300' AS 'account_cd'
+		  	 , '301' AS 'detail_account_cd'
+		 	 , DATE_FORMAT(now(), '%Y-%m-%d') AS 'occur_date'
+		 	 , CASE
+                 WHEN DATE_FORMAT(emp.entry_date,'%Y%m') = DATE_FORMAT(DATE_SUB(curdate(),INTERVAL 1 month),'%Y%m')
+                  	THEN ROUND((emp.salary/cast(date_format(LAST_DAY(NOW() - interval 1 month),'%d') as unsigned)) * TIMESTAMPDIFF(DAY, emp.entry_date, LAST_DAY(NOW() - interval 1 month)), -1)+IFNULL(al.extra_pay,0)
+              	 ELSE (emp.salary - emp.nat_ps - emp.h_insure - emp.ohs_insure - emp.e_insure - emp.income_tax)+IFNULL(al.extra_pay,0)
+               END AS amt
+             , emp.loginID
+         FROM tb_emp emp
+            LEFT OUTER JOIN (
+            				 SELECT SUM(IFNULL(di.dv_amt,0)) AS extra_pay, di.loginID
+                                 FROM tb_dv_info di
+                           	 WHERE date_format(di.dv_use_date,'%Y%m') = date_format(DATE_SUB(STR_TO_DATE(concat(#{from_date},'-01'), '%Y-%m-%d'),INTERVAL 1 month),'%Y%m')
+                          	 GROUP BY di.loginID
+                         ) al ON emp.loginID = al.loginID
+         WHERE emp.loginID NOT IN (
+                                   SELECT loginID
+                                   		FROM tb_sal_his
+                                   WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	  )   
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_acc_slip) 국민연금 -->
+	<insert id = "allEmpPayment_natps">
+		INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+		SELECT (SELECT maxfield FROM
+			   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+			 , 'C300' AS 'account_cd'
+			 , '302' AS 'detail_account_cd'
+			 , DATE_FORMAT(now(), '%Y-%m-%d')
+			 , emp.nat_ps AS 'amt'
+			 , emp.loginID AS 'direct_id'
+		FROM tb_emp emp
+		WHERE emp.loginID NOT IN (
+                                  SELECT loginID
+                                  	FROM tb_sal_his
+                                  WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	 )   
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_acc_slip) 건강보험 -->
+	<insert id = "allEmpPayment_hinsure">
+		INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+		SELECT (SELECT maxfield FROM
+		   	   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+		 	 , 'C300' AS 'account_cd'
+		 	 , '303' AS 'detail_account_cd'
+		 	 , DATE_FORMAT(now(), '%Y-%m-%d') AS 'occur_date'
+		 	 , emp.h_insure AS 'amt'
+		 	 , emp.loginID AS 'direct_id'
+		FROM tb_emp emp
+		WHERE emp.loginID NOT IN (
+                                  SELECT loginID
+                                  	FROM tb_sal_his
+                                  WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	 )   
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_acc_slip) 산재보험 -->
+	<insert id = "allEmpPayment_ohsinsure">
+		INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+		SELECT (SELECT maxfield FROM
+			   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+			 , 'C300' AS 'account_cd'
+			 , '304' AS 'detail_account_cd'
+			 , DATE_FORMAT(now(), '%Y-%m-%d') AS 'occur_date'
+			 , emp.ohs_insure AS 'amt'
+			 , emp.loginID AS 'direct_id'
+		FROM tb_emp emp
+		WHERE emp.loginID NOT IN (
+                                  SELECT loginID
+                                  	FROM tb_sal_his
+                                  WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	 ) 
+	</insert>
+	
+	<!-- 급여지급처리 -> 일괄 지급(tb_acc_slip) 고용보험 -->
+	<insert id = "allEmpPayment_einsure">
+		INSERT INTO tb_acc_slip (slip_no, account_cd, detail_account_cd, occur_date, amt, direct_id)
+		SELECT (SELECT maxfield FROM
+			   (SELECT MAX(slip_no) AS maxfield FROM tb_acc_slip) AS sub_table) + 1 AS 'slip_no'
+			 , 'C300' AS 'account_cd'
+			 , '305' AS 'detail_account_cd' 
+			 , DATE_FORMAT(now(), '%Y-%m-%d') AS 'occur_date'
+			 , emp.e_insure AS 'amt'
+			 , emp.loginID AS 'direct_id'
+		FROM tb_emp emp
+			WHERE emp.loginID NOT IN (
+                                  SELECT loginID
+                                  	FROM tb_sal_his
+                                  WHERE DATE_FORMAT(payment_date, '%Y-%m') = #{from_date}
+                             	 ) 
+	</insert>
+</mapper>

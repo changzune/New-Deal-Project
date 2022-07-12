@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="kr.happyjob.study.sampletest.dao.SampletestDao">
+   
+   <!-- 목록 -->
+   <select id="samplepage6list" resultType="kr.happyjob.study.sampletest.model.Sam6list">
+            /*kr.happyjob.study.sampletest.dao.SampletestDao.samplepage6list*/
+			select ntc_no
+			      ,loginID
+			      ,ntc_title
+			      ,ntc_content
+			      ,DATE_FORMAT(ntc_regdate, '%Y-%m-%d') as ntc_regdate
+		   from tb_notice
+		 <where>
+			<if test="(searchword != null) and (!searchword.equals(''))">
+				<choose>
+					<when test="searchoption eq 'title'.toString()">
+						and ntc_title Like CONCAT('%', #{searchword}, '%')
+					</when>
+					<when
+						test="searchoption eq 'cont'.toString()">
+						and ntc_content LIKE CONCAT('%', #{searchword}, '%')
+					</when>
+					<otherwise>
+						and ( 
+						           ntc_title Like CONCAT('%', #{searchword}, '%')
+						       or ntc_content LIKE CONCAT('%', #{searchword}, '%')
+						      )   
+					</otherwise>
+				</choose>
+			</if>
+		</where>  		   
+		  order by  ntc_regdate desc
+			limit #{pageindex}, #{pagesize}	
+     </select>
+     
+ <!-- 목록 -->
+   <select id="samplepage6listtotcant" resultType="int">
+            /*kr.happyjob.study.sampletest.dao.SampletestDao.samplepage6listtotcant*/
+			select count(ntc_no)
+		   from tb_notice
+		 <where>
+			<if test="(searchword != null) and (!searchword.equals(''))">
+				<choose>
+					<when test="searchoption eq 'title'.toString()">
+						and ntc_title Like CONCAT('%', #{searchword}, '%')
+					</when>
+					<when
+						test="searchoption eq 'cont'.toString()">
+						and ntc_content LIKE CONCAT('%', #{searchword}, '%')
+					</when>
+					<otherwise>
+						and ( 
+						           ntc_title Like CONCAT('%', #{searchword}, '%')
+						       or ntc_content LIKE CONCAT('%', #{searchword}, '%')
+						      )   
+					</otherwise>
+				</choose>
+			</if>
+		</where>  		 
+     </select>  
+
+</mapper>

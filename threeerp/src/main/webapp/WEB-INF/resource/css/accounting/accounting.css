@@ -1,0 +1,125 @@
+@charset "UTF-8";
+
+.btnType{
+	float:right;
+}
+
+.app_date_apply{
+	 height:25px;
+	 margin-bottom:5px;
+}
+
+.selectEmpDv{
+	margin-bottom:10px;
+	overflow:hidden;
+}
+
+.selectEmpDv li{
+	float:left;
+	margin-right:30px;	
+}
+
+#empDvReg{
+	border:1px solid #000;
+}
+
+#dv_form{
+	display:none;
+}
+
+#searchEnter{
+	margin-right:25px;
+}
+
+#tableTextD .tdtext1{
+	text-align:center;
+}
+
+.btnType{
+	float:right;
+}
+
+.app_date_apply{
+	 height : 25px;
+	 margin-bottom:5px;
+}
+
+.selectEmpDv{
+	margin-bottom:10px;
+	overflow : hidden;
+}
+
+.selectEmpDv li{
+	float:left;
+	margin-right: 30px;	
+}
+
+#empDvReg{
+	border : 1px solid #000;
+}
+
+.dv_form{
+	display : none;
+}
+
+.att_file_open{
+	float : left;
+}
+
+#container ul 
+.contents 
+.content 
+.app_date_apply 
+.datepicker {
+	text-align:center;
+	padding:5px;
+	border-radius:0px !important;
+	margin: -2px;
+}
+
+.ui-widget-header 
+.ui-widget-header 
+.ui-helper-clearfix 
+.ui-corner-all {
+	background: #d3d3d3 !important;
+	border:1px solid #d3d3d3 !important;
+}
+
+.ui-widget-header{
+	background: #d3d3d3 !important;
+	border:1px solid #d3d3d3 !important;
+}
+
+#tableTextD tr th{
+	height: 39px;
+}
+
+.scrolltbody {
+	    display: block;
+	    border-collapse: collapse;
+	    border: 1px solid rgb(187,194,205);
+	}
+	.scrolltbody th { border: 1px solid #000; }
+	.scrolltbody td { border: 1px solid #000; border-top: 0; }
+	.scrolltbody tbody {
+	    display: block;
+	    height: 159px;
+	    overflow: auto;
+	}
+	.scrolltbody > tr > th:nth-of-type(1){ width: 84px; }
+	.scrolltbody > tr > th:nth-of-type(2){ width: 93px; }
+	.scrolltbody > tr > th:nth-of-type(3){ width: 92px; }
+	.scrolltbody > tr > th:nth-of-type(4){ width: 92px; }
+	.scrolltbody > tr > th:nth-of-type(5){ width: 92px; }
+	.scrolltbody > tr > th:nth-of-type(6){ width: 92px; }
+	.scrolltbody > tr > th:nth-of-type(7){ width: 100px; }
+	.scrolltbody > tr > th:nth-of-type(8){ width: 100px; }
+	.scrolltbody > tr > th:nth-of-type(9){ width: 92px; } 
+
+.app_select_apply{
+	margin-bottom: 10px;
+}
+
+#acc_cb{
+	height:28px;
+}

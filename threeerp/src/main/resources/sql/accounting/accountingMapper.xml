@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="kr.happyjob.study.accounting.dao.AcctitleDao">
+
+
+	<!--리스트 조회 -->
+
+	<select id="listAcctitle" resultType="kr.happyjob.study.accounting.model.AcctitleModel">
+		SELECT *
+		FROM		(SELECT concat(gc.group_name,'(',gc.group_code,')') as bigSelect ,
+							concat(ac.detail_account_nm,'(',ac.detail_account_cd,')') as accSmall ,
+					(SELECT dc.detail_name 
+					 FROM 	tb_detail_code dc 
+					 WHERE  dc.group_code ='REVEXPcd' 
+					 AND	dc.detail_code = ac.account_type) as payment,
+							ac.note,
+							ac.use_yn as useYn
+					FROM 	tb_account ac 
+					left join tb_group_code gc
+					on 		  gc.group_code = ac.account_cd) list
+		<where> 
+		<!-- and bigSelect Like concat('%',#{bigSelect},'%') 
+			우선적으로 사용은 하지만 장기적으로 볼 때 예를 들어 대분류 코드가 A1001이라면? 조회가 될 텐데 다른 좋은 방법이 있는지 여쭤보기
+		 -->
+			<if test="(bigSelect != null) and (!bigSelect.equals(''))">
+				and bigSelect Like concat('%',#{bigSelect},'%') 
+			</if>
+			<if test="(accSmall != null) and (!accSmall.equals(''))">
+				and accSmall = #{accSmall}
+			</if>
+			<if test="(payment != null) and (!payment.equals(''))">
+				and payment = #{payment}
+			</if>
+			<if test="(useYn != null) and (!useYn.equals(''))">
+				and ifnull(useYn,'N') = #{useYn}
+			</if>
+			
+		</where>
+		LIMIT #{pageindex}, #{pagesize}
+	</select>
+
+	<!--목록 갯수 -->
+	<select id="countAccTitleList" resultType="int">
+		SELECT count(*)
+		  FROM
+				(SELECT 
+				 		concat(gc.group_name,'(',gc.group_code,')') as bigSelect,
+						concat(ac.detail_account_nm,'(',ac.detail_account_cd,')') as accSmall,
+								(SELECT dc.detail_name 
+								 FROM 	tb_detail_code dc 
+								 WHERE 	dc.group_code = 'REVEXPcd' and dc.detail_code = ac.account_type) as payment,
+										ac.note,
+										ac.use_yn as useYn
+										FROM tb_account ac left join tb_group_code gc
+										on gc.group_code = ac.account_cd )A
+		<where>
+			<if test="(bigSelect != null) and (!bigSelect.equals(''))">
+				and bigSelect Like concat('%',#{bigSelect},'%')
+			</if>
+			<if test="(accSmall != null) and (!accSmall.equals(''))">
+				and accSmall = #{accSmall}
+			</if>
+			<if test="(payment != null) and (!payment.equals(''))">
+				and payment = #{payment}
+			</if>
+			<if test="(useYn != null) and (!useYn.equals(''))">
+				and ifnull(useYn,'N') = #{useYn}
+			</if>							
+
+		</where>
+	</select>
+	
+	<!-- 계정 대분류 조회 -->
+	<select id="selectBiglist" resultType="kr.happyjob.study.accounting.model.AcctitleModel">
+		/*kr.happyjob.study.accounting.dao.selectBiglist*/
+			SELECT 	detail_code as cd 
+					,concat(detail_name,'(',detail_code,')') as name
+		    FROM 	tb_detail_code
+		    WHERE 	group_code = "ACCcd" 
+	</select>
+	
+	<!-- 계정 세부 조회 -->
+	<select id="selectAcclist" resultType="kr.happyjob.study.accounting.model.AcctitleModel">
+		/*kr.happyjob.study.accounting.dao.selectAcclist*/
+		SELECT concat(ta.detail_account_nm,' (',ta.detail_account_cd,')' ) as cd
+			  ,concat(ta.detail_account_nm,' (',ta.detail_account_cd,')' ) as name
+		FROM  tb_account ta 
+		WHERE account_cd = #{searchkey}
+	</select>
+	
+	<!-- 구분 조회  -->
+	<select id="selectPaymentlist" resultType="kr.happyjob.study.accounting.model.AcctitleModel">
+		/*kr.happyjob.study.accounting.dao.selectPaymentlist*/
+		SELECT detail_name as cd
+			  ,detail_name as name
+		FROM   tb_detail_code 
+		WHERE  group_code = 'REVEXPcd'
+	
+	</select>
+	
+	<insert id="acctitleWrite">
+	    <selectKey resultType="string" keyProperty="detail_account_cd" order="BEFORE">
+            SELECT cast((IFNULL(MAX(cast(detail_account_cd as unsigned)),0) + 1) as char)
+              FROM tb_account
+             WHERE account_cd = #{bigSelect2}
+        </selectKey> 
+		insert into tb_account (
+					 account_cd
+					,detail_account_cd
+					,detail_account_nm
+					,note
+					,account_type
+					,use_yn
+		) values  ( 
+					 #{bigSelect2}
+					,#{detail_account_cd}
+					,#{accSmall2}
+					,#{note2}
+					,#{payment2}
+					,#{useYn2}
+		)
+	</insert>
+	
+	
+	
+	<!-- 한건 조회 -->
+	<select id="selectOne" resultType="kr.happyjob.study.accounting.model.AcctitleModel">
+	/*kr.happyjob.study.accounting.dao.selectOne*/
+	SELECT *
+	FROM	(SELECT concat(gc.group_name,'(',gc.group_code,')') as bigSelect 
+				  	,concat(ac.detail_account_nm,'(',ac.detail_account_cd,')') as accSmall
+				    ,(SELECT dc.detail_name 
+				   	  FROM   tb_detail_code dc 
+				   	  WHERE  dc.group_code ='REVEXPcd' 
+				   	  AND    dc.detail_code = ac.account_type) as payment
+					   	 	,ac.note
+					   	 	,ac.use_yn as useYn
+				   	 FROM    tb_account ac 
+				   	 left join tb_group_code gc
+				   	 on 	   gc.group_code = ac.account_cd) list 
+				   	 WHERE 	   bigSelect = #{bigSelect}
+				   	 and       accSmall = #{accSmall}
+			   	 	
+	
+</select>
+
+	<update id="acctitleUpdate">
+      UPDATE tb_account
+         SET detail_account_nm = #{accSmall}, 
+            note = #{note},
+            use_yn = #{useYn},
+            account_type = #{payment}
+       WHERE account_cd = #{account_cd}
+       AND   detail_account_cd = #{accSmall_cd}   
+   </update>
+	
+	<delete id="acctitleDelete">
+	DELETE FROM tb_account
+		   WHERE account_cd = #{account_cd}
+		   AND detail_account_cd = #{accSmall_cd} </delete>
+	
+</mapper>
+
